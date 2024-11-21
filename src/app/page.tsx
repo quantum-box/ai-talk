@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useCallback, useState } from "react";
 import { RealtimeClient } from "@openai/realtime-api-beta";
 import { ItemType } from "@openai/realtime-api-beta/dist/lib/client.js";
@@ -111,34 +110,46 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <div>
-          {items.map((item) => {
-            return (
-              <div key={item.id}>
-                {item.role}：{JSON.stringify(item.formatted.transcript)}
-              </div>
-            );
-          })}
-        </div>
-
-        <div>
-          {isConnected ? (
-            <button onClick={disconnectConversation}>停止</button>
-          ) : (
-            <button onClick={connectConversation}>録音開始</button>
-          )}
+    <div className="bg-gray-100 min-h-screen flex flex-col items-center">
+      <header className="bg-green-500 text-white w-full text-center py-4">
+        <h1 className="text-xl font-bold">AO Talk</h1>
+      </header>
+      <main
+        className="flex-1 w-full max-w-md mx-auto p-4"
+        style={{ paddingBottom: "80px" }}
+      >
+        <div className="flex flex-col gap-4">
+          {items.map((item) => (
+            <div
+              key={item.id}
+              className={`p-4 max-w-[80%] rounded-lg ${
+                item.role === "user"
+                  ? "bg-blue-500 text-white self-end"
+                  : "bg-gray-300 text-black self-start"
+              }`}
+            >
+              <p>{item.formatted.transcript}</p>
+            </div>
+          ))}
         </div>
       </main>
+      <footer className="fixed bottom-0 left-0 w-full bg-white border-t p-4 flex justify-center">
+        {isConnected ? (
+          <button
+            onClick={disconnectConversation}
+            className="px-4 py-2 bg-red-500 text-white rounded-lg"
+          >
+            停止
+          </button>
+        ) : (
+          <button
+            onClick={connectConversation}
+            className="px-4 py-2 bg-green-500 text-white rounded-lg"
+          >
+            録音開始
+          </button>
+        )}
+      </footer>
     </div>
   );
 }
