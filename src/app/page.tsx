@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useCallback, useState, useRef } from "react";
 import { RealtimeClient } from "@openai/realtime-api-beta";
 import { ItemType } from "@openai/realtime-api-beta/dist/lib/client.js";
 import { WavRecorder, WavStreamPlayer } from "@/lib/wavtools/index.js";
@@ -19,6 +19,39 @@ export default function Home() {
 
   // itemはメッセージデータのオブジェクト。発言履歴やrole、status、typeなどを含みます。
   const [items, setItems] = useState<ItemType[]>([]);
+
+  // 音声を可視化するために波系
+  const [waveformData, setWaveformData] = useState<number[]>([]);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const drawWaveform = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !waveformData.length) return;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const { width, height } = canvas;
+    ctx.clearRect(0, 0, width, height);
+
+    // 波形を描画
+    ctx.strokeStyle = "#4A90E2"; // 青色の波形
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+
+    const sliceWidth = width / waveformData.length;
+    waveformData.forEach((value, index) => {
+      const x = sliceWidth * index;
+      const y = height / 2 + (value / 256) * (height / 2); // 値を高さにマッピング
+      if (index === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    });
+
+    ctx.stroke();
+  }, [waveformData]);
 
   const connectConversation = useCallback(async () => {
     // 状態を変更
@@ -41,7 +74,15 @@ export default function Home() {
 
     console.log(client.conversation.getItems());
     if (client.getTurnDetectionType() === "server_vad") {
-      await wavRecorder.record((data) => client.appendInputAudio(data.mono));
+      await wavRecorder.record((data) => {
+        client.appendInputAudio(data.mono);
+
+        // 波形データを更新
+        const normalizedData = Array.from(data.mono, (sample) =>
+          Math.abs(sample * 128)
+        ); // 0-255に正規化
+        setWaveformData(normalizedData);
+      });
     }
   }, []);
 
@@ -54,7 +95,13 @@ export default function Home() {
     await wavRecorder.end();
 
     wavStreamPlayer.interrupt();
+
+    setWaveformData([]); // 波形をリセット
   }, []);
+
+  useEffect(() => {
+    drawWaveform();
+  }, [waveformData, drawWaveform]);
 
   useEffect(() => {
     // AIへの指示をセット
@@ -110,12 +157,20 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="bg-gray-100 min-h-screen flex flex-col items-center">
-      <header className="bg-green-500 text-white w-full text-center py-4">
+    <div className="relative bg-gray-100 min-h-screen flex flex-col items-center">
+      {/* 背景の波形 */}
+      <canvas
+        ref={canvasRef}
+        className="absolute top-0 left-0 w-full h-full z-0"
+        width={800}
+        height={600}
+      />
+
+      <header className="bg-green-500 text-white w-full text-center py-4 z-10">
         <h1 className="text-xl font-bold">AO Talk</h1>
       </header>
       <main
-        className="flex-1 w-full max-w-md mx-auto p-4"
+        className="flex-1 w-full max-w-md mx-auto p-4 overflow-y-auto z-10"
         style={{ paddingBottom: "80px" }}
       >
         <div className="flex flex-col gap-4">
@@ -133,7 +188,7 @@ export default function Home() {
           ))}
         </div>
       </main>
-      <footer className="fixed bottom-0 left-0 w-full bg-white border-t p-4 flex justify-center">
+      <footer className="fixed bottom-0 left-0 w-full bg-white border-t p-4 flex justify-center z-10">
         {isConnected ? (
           <button
             onClick={disconnectConversation}
