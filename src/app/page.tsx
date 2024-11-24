@@ -134,7 +134,7 @@ export default function Home() {
     // AIへの指示をセット
     client.updateSession({
       instructions:
-        "あなたは役にたつAIアシスタントです。ただ、しばしば質問者の意図を間違えることがあります。質問者の意図を汲み取れないことを考慮した上で、相手に不快感を与えずに会話をしてください。3回以上同じ回答をしそうな場合はあなたが上手く解釈できていない可能性があるため、相手に謝罪し話題を必ず変えてください。",
+        "あなたは役にたつAIアシスタントです。ただ、しばしば質問者の意図を間違えることがあります。違いますと言われたら回答するのをやめ、もう一度何を質問されたか聞き直してください。3回以上同じ回答をしそうな場合はあなたが上手く解釈できていない可能性があるため、相手に謝罪し話題を必ず変えてください。",
     });
     // 音声toテキスト翻訳のモデルをセット
     client.updateSession({ input_audio_transcription: { model: "whisper-1" } });
@@ -228,7 +228,17 @@ export default function Home() {
                   : "bg-white text-black self-start"
               }`}
             >
-              <p>{item.formatted.transcript}</p>
+              {item.formatted.transcript !== "" ? (
+                // テキスト表示
+                <p>{item.formatted.transcript}</p>
+              ) : item.formatted.text !== "" ? (
+                <p>{item.formatted.text}</p>
+              ) : (
+                // ローディングアイコン表示
+                <div className="flex items-center justify-center">
+                  <div className="spinner"></div>
+                </div>
+              )}
             </div>
           ))}
         </div>
