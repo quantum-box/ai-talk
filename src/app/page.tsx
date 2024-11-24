@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useCallback, useState, useRef } from "react";
 import { RealtimeClient } from "@openai/realtime-api-beta";
 import { ItemType } from "@openai/realtime-api-beta/dist/lib/client.js";
 import { WavRecorder, WavStreamPlayer } from "@/lib/wavtools/index.js";
@@ -19,6 +19,52 @@ export default function Home() {
 
   // itemはメッセージデータのオブジェクト。発言履歴やrole、status、typeなどを含みます。
   const [items, setItems] = useState<ItemType[]>([]);
+
+  // 音声を可視化するために波系
+  const [waveformData, setWaveformData] = useState<number[]>([]);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animationRef = useRef<number | null>(null);
+
+  const drawWaveform = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !waveformData.length) return;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const { width, height } = canvas;
+    // Canvasのクリア
+    ctx.clearRect(0, 0, width, height);
+
+    // 波形のスタイル設定
+    ctx.strokeStyle = "#ff6f6f"; // 背景色の補色
+    ctx.lineWidth = 4;
+
+    // 波形を描画
+    ctx.beginPath();
+
+    const centerY = height / 2; // 中央ライン
+    const step = Math.ceil(waveformData.length / canvas.width); // データの間引き
+    const amp = canvas.height / 2 - 10; // 波形の振幅（上下の最大高さ）
+
+    for (let x = 0; x < canvas.width; x++) {
+      const index = x * step;
+      const sample = waveformData[index] || 0; // 現在の音声データ
+      const y = centerY - (sample * amp) / 10; // 波の高さ
+
+      // 最初の点を moveTo、それ以降は lineTo
+      if (x === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+
+    ctx.stroke();
+
+    // 次のフレームを描画
+    animationRef.current = requestAnimationFrame(drawWaveform);
+  }, [waveformData]);
 
   const connectConversation = useCallback(async () => {
     // 状態を変更
@@ -41,7 +87,16 @@ export default function Home() {
 
     console.log(client.conversation.getItems());
     if (client.getTurnDetectionType() === "server_vad") {
-      await wavRecorder.record((data) => client.appendInputAudio(data.mono));
+      await wavRecorder.record((data) => {
+        client.appendInputAudio(data.mono);
+
+        // 波形データを更新
+        const normalizedData = Array.from(
+          data.mono,
+          (sample) => Math.abs(sample / 32768) // Normalize to range [0, 1]
+        );
+        setWaveformData(normalizedData);
+      });
     }
   }, []);
 
@@ -54,12 +109,32 @@ export default function Home() {
     await wavRecorder.end();
 
     wavStreamPlayer.interrupt();
+
+    // 波形を消去する処理
+    setWaveformData([]);
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    }
   }, []);
+
+  useEffect(() => {
+    drawWaveform();
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [waveformData, drawWaveform]);
 
   useEffect(() => {
     // AIへの指示をセット
     client.updateSession({
-      instructions: "あなたは役にたつAIアシスタントです",
+      instructions:
+        "あなたは役にたつAIアシスタントです。ただ、しばしば質問者の意図を間違えることがあります。違いますと言われたら回答するのをやめ、もう一度何を質問されたか聞き直してください。3回以上同じ回答をしそうな場合はあなたが上手く解釈できていない可能性があるため、相手に謝罪し話題を必ず変えてください。",
     });
     // 音声toテキスト翻訳のモデルをセット
     client.updateSession({ input_audio_transcription: { model: "whisper-1" } });
@@ -86,7 +161,13 @@ export default function Home() {
       console.log("convesation.updated");
       const items = client.conversation.getItems();
       console.log("items", items);
+      const audio: Int16Array = delta?.audio;
       if (delta?.audio) {
+        const normalizedData = Array.from(
+          audio,
+          (sample) => Math.abs(sample / 32768) // Normalize to range [0, 1]
+        );
+        setWaveformData(normalizedData);
         wavStreamPlayer.add16BitPCM(delta.audio, item.id);
       }
       if (item.status === "completed" && item.formatted.audio?.length) {
@@ -110,12 +191,31 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="bg-gray-100 min-h-screen flex flex-col items-center">
-      <header className="bg-green-500 text-white w-full text-center py-4">
-        <h1 className="text-xl font-bold">AO Talk</h1>
+    <div
+      className="relative bg-gray-100 min-h-screen flex flex-col items-center"
+      style={{
+        background: "linear-gradient(to bottom, #a2d9ff, #d4f1ff)",
+      }}
+    >
+      {/* 背景中央に固定表示するCanvas */}
+      <canvas
+        ref={canvasRef}
+        width={800}
+        height={600}
+        style={{
+          position: "fixed",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          zIndex: 1, // 他のUIの上に表示
+        }}
+      ></canvas>
+
+      <header className="bg-green-500 text-white w-full text-center py-4 z-10">
+        <h1 className="text-xl font-bold">AI Talk</h1>
       </header>
       <main
-        className="flex-1 w-full max-w-md mx-auto p-4"
+        className="flex-1 w-full max-w-md mx-auto p-4 overflow-y-auto z-10"
         style={{ paddingBottom: "80px" }}
       >
         <div className="flex flex-col gap-4">
@@ -124,16 +224,26 @@ export default function Home() {
               key={item.id}
               className={`p-4 max-w-[80%] rounded-lg ${
                 item.role === "user"
-                  ? "bg-blue-500 text-white self-end"
-                  : "bg-gray-300 text-black self-start"
+                  ? "bg-green-500 text-black self-end"
+                  : "bg-white text-black self-start"
               }`}
             >
-              <p>{item.formatted.transcript}</p>
+              {item.formatted.transcript !== "" ? (
+                // テキスト表示
+                <p>{item.formatted.transcript}</p>
+              ) : item.formatted.text !== "" ? (
+                <p>{item.formatted.text}</p>
+              ) : (
+                // ローディングアイコン表示
+                <div className="flex items-center justify-center">
+                  <div className="spinner"></div>
+                </div>
+              )}
             </div>
           ))}
         </div>
       </main>
-      <footer className="fixed bottom-0 left-0 w-full bg-white border-t p-4 flex justify-center">
+      <footer className="fixed bottom-0 left-0 w-full bg-white border-t p-4 flex justify-center z-10">
         {isConnected ? (
           <button
             onClick={disconnectConversation}
@@ -146,7 +256,7 @@ export default function Home() {
             onClick={connectConversation}
             className="px-4 py-2 bg-green-500 text-white rounded-lg"
           >
-            録音開始
+            会話開始
           </button>
         )}
       </footer>
