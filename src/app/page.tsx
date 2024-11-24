@@ -212,7 +212,7 @@ export default function Home() {
       ></canvas>
 
       <header className="bg-green-500 text-white w-full text-center py-4 z-10">
-        <h1 className="text-xl font-bold">AO Talk</h1>
+        <h1 className="text-xl font-bold">AI Talk</h1>
       </header>
       <main
         className="flex-1 w-full max-w-md mx-auto p-4 overflow-y-auto z-10"
